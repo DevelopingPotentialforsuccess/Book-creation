@@ -1,0 +1,8 @@
+{
+  "name": "100. Book Creation Deploy",
+  "description": "A professional AI-powered platform for generating custom books with advanced styling, handwritten aesthetics, and interactive layouts.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
