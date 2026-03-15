@@ -79,3 +79,87 @@ export const generateBookStory = async (
           properties: {
             title: { type: Type.STRING },
             pages: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  pageNumber: { type: Type.INTEGER },
+                  title: { type: Type.STRING, description: 'Short chapter or page title' },
+                  text: { type: Type.STRING },
+                  imagePrompt: { type: Type.STRING },
+                },
+                required: ["pageNumber", "title", "text", "imagePrompt"],
+              },
+            },
+          },
+          required: ["title", "pages"],
+        },
+      },
+    });
+
+    if (!response.text) throw new Error("Empty response from Gemini");
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.error("Story generation failed, retrying once...", error);
+    // Single retry for robustness
+    const retry = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: { parts: [...parts, textPart] },
+      config: { responseMimeType: "application/json" }
+    });
+    return JSON.parse(retry.text || "{}");
+  }
+};
+
+/**
+ * Generates an illustration. Character consistency is maintained by including reference images.
+ */
+export const generateIllustration = async (prompt: string, heroAvatars: string[] = []): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const parts: any[] = [];
+
+  heroAvatars.forEach(avatar => {
+    parts.push({
+      inlineData: {
+        data: avatar.split(',')[1],
+        mimeType: 'image/jpeg'
+      }
+    });
+  });
+
+  const refNote = heroAvatars.length > 0 ? ` Maintain the exact appearance of the children from the provided reference images as the main characters.` : '';
+  parts.push({ text: `Professional artistic book illustration: ${prompt}.${refNote} High artistic quality, vivid lighting, ensure character consistency.` });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: { parts },
+    config: { imageConfig: { aspectRatio: "1:1" } }
+  });
+
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+      return `data:image/png;base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error("Image generation failed");
+};
+
+export const generateTTS = async (text: string, voiceName: string = 'Kore'): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-preview-tts",
+    contents: [{ parts: [{ text }] }],
+    config: {
+      responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  });
+
+  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (base64Audio) return base64Audio;
+  throw new Error("TTS generation failed");
+};
